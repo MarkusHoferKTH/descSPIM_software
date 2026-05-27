@@ -1,0 +1,97 @@
+import numpy as np
+from skimage import data
+
+import napari
+import tifffile as tiff
+from napari.utils.translations import trans
+
+from scipy.ndimage import zoom
+
+# Directory of the TIF file carrying two z-stacks acquisitions where each z-stack was captured with the exact same settings
+# except for the wavelength of the illumination: One z-stack was captured with wavelength 405 nm, and one z-stack was
+# captured with 561 nm
+file_path = r"C:\Users\macka\Pictures\Thorlabs\what2\Composite.tif"
+
+# Read file
+data = tiff.imread(file_path)
+
+print("Resampling to isotropic voxels...")
+
+# Set scale in z-direction
+z_scale = 25 / 3.45   # ≈ 7.25
+
+# Split channels
+channel0 = data[:, 0]
+channel1 = data[:, 1]
+
+# Resample z-axis only
+channel0_iso = zoom(channel0, (z_scale, 1, 1), order=1)
+channel1_iso = zoom(channel1, (z_scale, 1, 1), order=1)
+
+print("New shape:", channel0_iso.shape)
+
+print("Shape:", data.shape)
+
+channel_axis = np.argmin(np.abs(np.array(data.shape) - 2))
+print("Detected channel axis:", channel_axis)
+
+data = np.moveaxis(data, channel_axis, 1)
+
+print("Reordered shape:", data.shape)
+
+# Create viewer
+viewer = napari.Viewer(ndisplay=3)
+
+# Split channels
+channel0 = data[:, 0]
+channel1 = data[:, 1]
+
+# Add channel for z-stack captured with 561 nm wavelength to the viewer
+viewer.add_image(
+    channel0_iso,
+    name="Channel 1",
+    rendering="attenuated_mip",
+    blending="additive",
+    opacity=0.6,
+    scale=(25, 3.45, 3.45),
+    colormap="green",
+)
+
+# Add channel for z-stack captured with 405 nm wavelength to the viewer
+viewer.add_image(
+    channel1_iso,
+    name="Channel 2",
+    rendering="attenuated_mip",
+    blending="additive",
+    opacity=0.6,
+    scale=(25, 3.45, 3.45),
+    colormap="magenta",
+)
+
+# Create plane
+plane_parameters = {
+    "position": (90, data.shape[2]//2, data.shape[3]//2),
+    "normal": (0, 1, 0),
+    "thickness": 10,
+}
+
+# Add plane for z-stack acquisitions
+viewer.add_image(
+    channel0,
+    name="Slice plane",
+    depiction="plane",
+    rendering="average",
+    blending="additive",
+    opacity=0.5,
+    scale=(25, 3.45, 3.45),
+    plane=plane_parameters,
+)
+
+# Viewer settings
+viewer.axes.visible = True
+viewer.camera.angles = (0, -30, 35)
+viewer.fit_to_view()
+viewer.text_overlay.visible = True
+
+if __name__ == '__main__':
+    napari.run()
